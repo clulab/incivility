@@ -12,8 +12,8 @@ def from_transformer(transformer: transformers.TFPreTrainedModel, n_outputs: int
     # Load model and collect encodings
     token_encodings = transformer([token_inputs, mask_inputs, segment_inputs])[0]
 
-    # Keep only [CLS] token encoding
-    sentence_encoding = tf.squeeze(token_encodings[:, 0:1, :], axis=1)
+    # Average token encodings
+    sentence_encoding = tf.keras.layers.GlobalAveragePooling1D()(token_encodings)
 
     # Apply dropout
     sentence_encoding = tf.keras.layers.Dropout(0.1)(sentence_encoding)
