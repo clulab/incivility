@@ -1,4 +1,5 @@
 import argparse
+from typing import Text
 
 import pandas as pd
 import tensorflow as tf
@@ -12,7 +13,12 @@ tokenizer = transformers.RobertaTokenizer.from_pretrained('roberta-base')
 transformer = transformers.TFRobertaModel.from_pretrained('roberta-base')
 
 
-def train(model_path, data_path, n_rows, learning_rate, batch_size, n_epochs):
+def train(model_path: Text,
+          data_path: Text,
+          n_rows: int,
+          learning_rate: float,
+          batch_size: int,
+          n_epochs: int):
     df = pd.read_csv(data_path, nrows=n_rows, usecols=["text", "NAMECALLING"]).dropna()
     x = data.from_tokenizer(tokenizer, df["text"])
     y = df["NAMECALLING"].values
@@ -38,7 +44,7 @@ def train(model_path, data_path, n_rows, learning_rate, batch_size, n_epochs):
     model.save_weights(model_path)
 
 
-def test(model_path, data_path, n_rows):
+def test(model_path: Text, data_path: Text, n_rows: int):
     model = models.from_transformer(transformer, 1)
     model.load_weights(model_path).expect_partial()
 

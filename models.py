@@ -2,7 +2,8 @@ import tensorflow as tf
 import transformers
 
 
-def from_transformer(transformer: transformers.TFPreTrainedModel, n_outputs: int) -> tf.keras.Model:
+def from_transformer(transformer: transformers.TFPreTrainedModel,
+                     n_outputs: int) -> tf.keras.Model:
 
     # Define inputs (token_ids, mask_ids, segment_ids)
     token_inputs = tf.keras.Input(shape=(None,), name='word_inputs', dtype='int32')

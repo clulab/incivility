@@ -1,8 +1,12 @@
 import numpy as np
+import transformers
+from typing import Mapping, Sequence, Text
 
 
 # converts texts into input matrices required by transformers
-def from_tokenizer(tokenizer, texts, pad_token=0):
+def from_tokenizer(tokenizer: transformers.PreTrainedTokenizer,
+                   texts: Sequence[Text],
+                   pad_token: int = 0) -> Mapping[Text, np.ndarray]:
     rows = [tokenizer.encode(text,
                              add_special_tokens=True,
                              max_length=tokenizer.model_max_length)
