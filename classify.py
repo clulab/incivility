@@ -61,7 +61,8 @@ def train(model_path: Text,
         if time is None:
             raise ValueError("time limit required for qsub")
         model_prefix, _ = os.path.splitext(model_path)
-        prefix = f"{model_prefix}.r{n_rows}.b{batch_size}.lr{learning_rate}"
+        n_rows_str = "all" if n_rows is None else n_rows
+        prefix = f"{model_prefix}.r{n_rows_str}.b{batch_size}.lr{learning_rate}"
         pbs_path = f"{prefix}.pbs"
         with open(pbs_path, "w") as pbs_file:
             pbs_file.write(textwrap.dedent(f"""
@@ -79,7 +80,7 @@ def train(model_path: Text,
                 singularity exec --nv \\
                   $HOME/hpc-ml_centos7-python3.7-transformers2.11.sif \\
                   python3.7 classify.py train \\
-                    --n-rows={n_rows} \\
+                    {'' if n_rows is None else f'--n-rows={n_rows}'} \\
                     --n-epochs={n_epochs} \\
                     --batch-size={batch_size} \\
                     --learning-rate={learning_rate} \\
