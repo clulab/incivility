@@ -83,7 +83,7 @@ def train(model_path: Text,
                     --n-epochs={n_epochs} \\
                     --batch-size={batch_size} \\
                     --learning-rate={learning_rate} \\
-                    {prefix}.model
+                    {prefix}.model \\
                     {data_path}
                 """))
         subprocess.run(["qsub", pbs_path])
