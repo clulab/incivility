@@ -94,11 +94,11 @@ def test(model_path: Text, data_path: Text, n_rows: int):
     import models
     import pandas as pd
 
-    model = models.from_transformer(get_tokenizer(), 1)
+    model = models.from_transformer(get_transformer(), 1)
     model.load_weights(model_path).expect_partial()
 
     df = pd.read_csv(data_path, nrows=n_rows, usecols=["text", "NAMECALLING"]).dropna()
-    x = data.from_tokenizer(get_transformer(), df["text"])
+    x = data.from_tokenizer(get_tokenizer(), df["text"])
 
     df.insert(1, "prediction", model.predict(x))
     print(df)
