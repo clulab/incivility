@@ -4,19 +4,14 @@ import subprocess
 from typing import Text
 import textwrap
 
-import pandas as pd
-import tensorflow as tf
-import transformers
-
-import data
-import models
-
 
 def get_tokenizer():
+    import transformers
     return transformers.RobertaTokenizer.from_pretrained('roberta-base')
 
 
 def get_transformer():
+    import transformers
     return transformers.TFRobertaModel.from_pretrained('roberta-base')
 
 
@@ -32,6 +27,11 @@ def train(model_path: Text,
     if not qsub:
         if time is not None:
             raise ValueError("time limit not supported")
+
+        import data
+        import models
+        import pandas as pd
+        import tensorflow as tf
 
         df = pd.read_csv(data_path, nrows=n_rows, usecols=["text", "NAMECALLING"]).dropna()
         x = data.from_tokenizer(get_tokenizer(), df["text"])
@@ -90,6 +90,10 @@ def train(model_path: Text,
 
 
 def test(model_path: Text, data_path: Text, n_rows: int):
+    import data
+    import models
+    import pandas as pd
+
     model = models.from_transformer(get_tokenizer(), 1)
     model.load_weights(model_path).expect_partial()
 
