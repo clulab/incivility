@@ -20,6 +20,7 @@ def train(model_path: Text,
           n_rows: int,
           learning_rate: float,
           batch_size: int,
+          grad_accum_steps: int,
           n_epochs: int,
           qsub: bool,
           time: Text):
@@ -30,6 +31,7 @@ def train(model_path: Text,
 
         import data
         import models
+        import ga
         import pandas as pd
         import tensorflow as tf
 
@@ -41,10 +43,18 @@ def train(model_path: Text,
         counts = df["NAMECALLING"].value_counts()
         class_weight = (counts.max() / counts).to_dict()
 
+        # determine optimizer
+        optimizer_kwargs = dict(
+            learning_rate=learning_rate, epsilon=1e-08, clipnorm=1.0)
+        if grad_accum_steps is not None:
+            optimizer_class = ga.AdamGA
+            optimizer_kwargs.update(grad_accum_steps=grad_accum_steps)
+        else:
+            optimizer_class = tf.optimizers.Adam
+
         model = models.from_transformer(get_transformer(), 1)
         model.compile(
-            optimizer=tf.keras.optimizers.Adam(
-                learning_rate=learning_rate, epsilon=1e-08, clipnorm=1.0),
+            optimizer=optimizer_class(**optimizer_kwargs),
             loss=tf.keras.losses.BinaryCrossentropy(),
             metrics=[
                 tf.keras.metrics.BinaryAccuracy(),
@@ -83,6 +93,7 @@ def train(model_path: Text,
                     {'' if n_rows is None else f'--n-rows={n_rows}'} \\
                     --n-epochs={n_epochs} \\
                     --batch-size={batch_size} \\
+                    {'' if grad_accum_steps is None else f'--grad-accum-steps={grad_accum_steps}'} \\
                     --learning-rate={learning_rate} \\
                     {prefix}.model \\
                     {data_path}
@@ -116,6 +127,7 @@ if __name__ == "__main__":
     train_parser.add_argument("--n-rows", type=int)
     train_parser.add_argument("--learning-rate", type=float, default=3e-5)
     train_parser.add_argument("--batch-size", type=int, default=1)
+    train_parser.add_argument("--grad-accum-steps", type=int, default=None)
     train_parser.add_argument("--n-epochs", type=int, default=10)
     train_parser.set_defaults(func=train)
     test_parser = subparsers.add_parser("test")
