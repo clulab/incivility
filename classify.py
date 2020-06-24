@@ -46,7 +46,7 @@ def train(model_path: Text,
         # determine optimizer
         optimizer_kwargs = dict(
             learning_rate=learning_rate, epsilon=1e-08, clipnorm=1.0)
-        if grad_accum_steps is not None:
+        if grad_accum_steps != 1:
             optimizer_class = ga.AdamGA
             optimizer_kwargs.update(grad_accum_steps=grad_accum_steps)
         else:
@@ -72,7 +72,7 @@ def train(model_path: Text,
             raise ValueError("time limit required for qsub")
         model_prefix, _ = os.path.splitext(model_path)
         n_rows_str = "all" if n_rows is None else n_rows
-        prefix = f"{model_prefix}.r{n_rows_str}.b{batch_size}.lr{learning_rate}"
+        prefix = f"{model_prefix}.r{n_rows_str}.b{batch_size}.ga{grad_accum_steps}.lr{learning_rate}"
         pbs_path = f"{prefix}.pbs"
         with open(pbs_path, "w") as pbs_file:
             pbs_file.write(textwrap.dedent(f"""
@@ -93,7 +93,7 @@ def train(model_path: Text,
                     {'' if n_rows is None else f'--n-rows={n_rows}'} \\
                     --n-epochs={n_epochs} \\
                     --batch-size={batch_size} \\
-                    {'' if grad_accum_steps is None else f'--grad-accum-steps={grad_accum_steps}'} \\
+                    --grad-accum-steps={grad_accum_steps} \\
                     --learning-rate={learning_rate} \\
                     {prefix}.model \\
                     {data_path}
@@ -127,7 +127,7 @@ if __name__ == "__main__":
     train_parser.add_argument("--n-rows", type=int)
     train_parser.add_argument("--learning-rate", type=float, default=3e-5)
     train_parser.add_argument("--batch-size", type=int, default=1)
-    train_parser.add_argument("--grad-accum-steps", type=int, default=None)
+    train_parser.add_argument("--grad-accum-steps", type=int, default=1)
     train_parser.add_argument("--n-epochs", type=int, default=10)
     train_parser.set_defaults(func=train)
     test_parser = subparsers.add_parser("test")
