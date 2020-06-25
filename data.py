@@ -1,6 +1,7 @@
 import numpy as np
+import pandas as pd
 import transformers
-from typing import Mapping, Sequence, Text
+from typing import Mapping, Sequence, Text, Union
 
 
 # converts texts into input matrices required by transformers
@@ -22,3 +23,15 @@ def from_tokenizer(tokenizer: transformers.PreTrainedTokenizer,
         mask_inputs=is_token,
         segment_inputs=np.zeros(shape=shape))
 
+
+def read_ads_csv(
+        data_path: Text,
+        n_rows: Union[int, None],
+        tokenizer: transformers.PreTrainedTokenizer) \
+        -> (pd.DataFrame, np.ndarray, np.ndarray):
+    df = pd.read_csv(data_path,
+                     nrows=n_rows,
+                     usecols=["text", "NAMECALLING"]).dropna()
+    x = from_tokenizer(tokenizer, df["text"])
+    y = df["NAMECALLING"].values
+    return df, x, y

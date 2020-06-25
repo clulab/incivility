@@ -5,18 +5,10 @@ from typing import Text
 import textwrap
 
 
-def get_tokenizer():
-    import transformers
-    return transformers.RobertaTokenizer.from_pretrained('roberta-base')
-
-
-def get_transformer():
-    import transformers
-    return transformers.TFRobertaModel.from_pretrained('roberta-base')
-
-
 def train(model_path: Text,
-          data_path: Text,
+          train_data_path: Text,
+          dev_data_path: Text,
+          pretrained_model_name: Text,
           n_rows: int,
           learning_rate: float,
           batch_size: int,
@@ -32,15 +24,22 @@ def train(model_path: Text,
         import data
         import models
         import ga
-        import pandas as pd
         import tensorflow as tf
+        import transformers
 
-        df = pd.read_csv(data_path, nrows=n_rows, usecols=["text", "NAMECALLING"]).dropna()
-        x = data.from_tokenizer(get_tokenizer(), df["text"])
-        y = df["NAMECALLING"].values
+        tokenizer_for = transformers.AutoTokenizer.from_pretrained
+        tokenizer = tokenizer_for(pretrained_model_name)
+        train_df, train_x, train_y = data.read_ads_csv(
+            data_path=train_data_path,
+            n_rows=n_rows,
+            tokenizer=tokenizer)
+        _, dev_x, dev_y = data.read_ads_csv(
+            data_path=dev_data_path,
+            n_rows=n_rows,
+            tokenizer=tokenizer)
 
         # set class weight inversely proportional to class counts
-        counts = df["NAMECALLING"].value_counts()
+        counts = train_df["NAMECALLING"].value_counts()
         class_weight = (counts.max() / counts).to_dict()
 
         # determine optimizer
@@ -52,7 +51,10 @@ def train(model_path: Text,
         else:
             optimizer_class = tf.optimizers.Adam
 
-        model = models.from_transformer(get_transformer(), 1)
+        model_for = transformers.TFRobertaModel.from_pretrained
+        model = models.from_transformer(
+            transformer=model_for(pretrained_model_name),
+            n_outputs=1)
         model.compile(
             optimizer=optimizer_class(**optimizer_kwargs),
             loss=tf.keras.losses.BinaryCrossentropy(),
@@ -61,7 +63,8 @@ def train(model_path: Text,
                 tf.keras.metrics.Precision(),
                 tf.keras.metrics.Recall(),
             ])
-        model.fit(x=x, y=y,
+        model.fit(x=train_x, y=train_y,
+                  validation_data=(dev_x, dev_y),
                   epochs=n_epochs,
                   batch_size=batch_size,
                   class_weight=class_weight)
@@ -96,21 +99,31 @@ def train(model_path: Text,
                     --grad-accum-steps={grad_accum_steps} \\
                     --learning-rate={learning_rate} \\
                     {prefix}.model \\
-                    {data_path}
+                    {train_data_path} \\
+                    {dev_data_path}
                 """))
         subprocess.run(["qsub", pbs_path])
 
 
-def test(model_path: Text, data_path: Text, n_rows: int):
+def test(model_path: Text,
+         data_path: Text,
+         pretrained_model_name: Text,
+         n_rows: int):
     import data
     import models
-    import pandas as pd
+    import transformers
 
-    model = models.from_transformer(get_transformer(), 1)
+    model_for = transformers.TFRobertaModel.from_pretrained
+    model = models.from_transformer(
+        transformer=model_for(pretrained_model_name),
+        n_outputs=1)
     model.load_weights(model_path).expect_partial()
 
-    df = pd.read_csv(data_path, nrows=n_rows, usecols=["text", "NAMECALLING"]).dropna()
-    x = data.from_tokenizer(get_tokenizer(), df["text"])
+    tokenizer_for = transformers.AutoTokenizer.from_pretrained
+    df, x, _ = data.read_ads_csv(
+        data_path=data_path,
+        n_rows=n_rows,
+        tokenizer=tokenizer_for(pretrained_model_name))
 
     df.insert(1, "prediction", model.predict(x))
     print(df)
@@ -118,10 +131,12 @@ def test(model_path: Text, data_path: Text, n_rows: int):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("--pretrained-model-name", default="roberta-base")
     subparsers = parser.add_subparsers()
     train_parser = subparsers.add_parser("train")
     train_parser.add_argument("model_path")
-    train_parser.add_argument("data_path")
+    train_parser.add_argument("train_data_path")
+    train_parser.add_argument("dev_data_path", nargs='?')
     train_parser.add_argument("--qsub", action="store_true")
     train_parser.add_argument("--time")
     train_parser.add_argument("--n-rows", type=int)
