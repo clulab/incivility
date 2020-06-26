@@ -75,7 +75,7 @@ def train(model_path: Text,
             raise ValueError("time limit required for qsub")
         model_prefix, _ = os.path.splitext(model_path)
         n_rows_str = "all" if n_rows is None else n_rows
-        prefix = f"{model_prefix}.r{n_rows_str}.b{batch_size}.ga{grad_accum_steps}.lr{learning_rate}"
+        prefix = f"{model_prefix}.{pretrained_model_name}.r{n_rows_str}.b{batch_size}.ga{grad_accum_steps}.lr{learning_rate}"
         pbs_path = f"{prefix}.pbs"
         with open(pbs_path, "w") as pbs_file:
             pbs_file.write(textwrap.dedent(f"""
