@@ -14,7 +14,7 @@ def from_transformer(transformer: transformers.TFPreTrainedModel,
     token_encodings = transformer([token_inputs, mask_inputs, segment_inputs])[0]
 
     # Average token encodings
-    sentence_encoding = tf.keras.layers.GlobalAveragePooling1D()(token_encodings)
+    sentence_encoding = tf.keras.layers.GlobalMaxPooling1D()(token_encodings)
 
     # Apply dropout
     sentence_encoding = tf.keras.layers.Dropout(0.1)(sentence_encoding)
