@@ -25,6 +25,7 @@ def train(model_path: Text,
         import models
         import ga
         import tensorflow as tf
+        import tensorflow_addons as tfa
         import transformers
 
         tokenizer_for = transformers.AutoTokenizer.from_pretrained
@@ -62,12 +63,20 @@ def train(model_path: Text,
                 tf.keras.metrics.BinaryAccuracy(),
                 tf.keras.metrics.Precision(),
                 tf.keras.metrics.Recall(),
+                tfa.metrics.F1Score(num_classes=1, threshold=0.5),
             ])
         model.fit(x=train_x, y=train_y,
                   validation_data=(dev_x, dev_y),
                   epochs=n_epochs,
                   batch_size=batch_size,
-                  class_weight=class_weight)
+                  class_weight=class_weight,
+                  callbacks=tf.keras.callbacks.ModelCheckpoint(
+                      filepath=model_path,
+                      monitor="val_f1_score",
+                      mode="max",
+                      verbose=1,
+                      save_weights_only=True,
+                      save_best_only=True))
         model.save_weights(model_path)
 
     else:
