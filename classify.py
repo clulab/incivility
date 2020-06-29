@@ -3,6 +3,7 @@ import os
 import subprocess
 from typing import Text
 import textwrap
+import sklearn
 
 
 def train(model_path: Text,
@@ -117,7 +118,8 @@ def train(model_path: Text,
 def test(model_path: Text,
          data_path: Text,
          pretrained_model_name: Text,
-         n_rows: int):
+         n_rows: int,
+         batch_size: int):
     import data
     import models
     import transformers
@@ -129,12 +131,15 @@ def test(model_path: Text,
     model.load_weights(model_path).expect_partial()
 
     tokenizer_for = transformers.AutoTokenizer.from_pretrained
-    df, x, _ = data.read_ads_csv(
+    df, x, y_ref = data.read_ads_csv(
         data_path=data_path,
         n_rows=n_rows,
         tokenizer=tokenizer_for(pretrained_model_name))
 
-    df.insert(1, "prediction", model.predict(x))
+    y_pred_scores = model.predict(x, batch_size=batch_size)
+    y_pred = (y_pred_scores >= 0.5).astype(int).ravel()
+    print(sklearn.metrics.classification_report(y_ref, y_pred))
+    df.insert(1, "prediction", y_pred_scores)
     print(df)
 
 
@@ -158,6 +163,7 @@ if __name__ == "__main__":
     test_parser.add_argument("model_path")
     test_parser.add_argument("data_path")
     test_parser.add_argument("--n-rows", type=int)
+    test_parser.add_argument("--batch-size", type=int, default=1)
     test_parser.set_defaults(func=test)
     args = parser.parse_args()
 
