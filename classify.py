@@ -1,7 +1,7 @@
 import argparse
 import os
 import subprocess
-from typing import Text
+from typing import Sequence, Text
 import textwrap
 import sklearn
 
@@ -115,32 +115,63 @@ def train(model_path: Text,
         subprocess.run(["qsub", pbs_path])
 
 
-def test(model_path: Text,
+def test(model_paths: Sequence[Text],
          data_path: Text,
          pretrained_model_name: Text,
          n_rows: int,
-         batch_size: int):
+         batch_size: int,
+         verbose: bool):
     import data
     import models
     import transformers
 
-    model_for = transformers.TFRobertaModel.from_pretrained
-    model = models.from_transformer(
-        transformer=model_for(pretrained_model_name),
-        n_outputs=1)
-    model.load_weights(model_path).expect_partial()
+    width = max(len(p) for p in model_paths)
+    headers = ["precision", "recall", "f1-score", "support"]
+    header = (f'{{:>{width}s}} ' + ' {:>9}' * 4).format('', *headers)
+    row_fmt = f'{{:>{width}s}} ' + ' {:>9.3f}' * 3 + ' {:>9}'
 
-    tokenizer_for = transformers.AutoTokenizer.from_pretrained
-    df, x, y_ref = data.read_ads_csv(
-        data_path=data_path,
-        n_rows=n_rows,
-        tokenizer=tokenizer_for(pretrained_model_name))
+    rows = []
+    for model_path in model_paths:
 
-    y_pred_scores = model.predict(x, batch_size=batch_size)
-    y_pred = (y_pred_scores >= 0.5).astype(int).ravel()
-    print(sklearn.metrics.classification_report(y_ref, y_pred))
-    df.insert(1, "prediction", y_pred_scores)
-    print(df)
+        # load the transformer model
+        model_for = transformers.TFRobertaModel.from_pretrained
+        model = models.from_transformer(
+            transformer=model_for(pretrained_model_name),
+            n_outputs=1)
+        model.load_weights(model_path).expect_partial()
+
+        # load the tokenizer and tokenize the test data
+        tokenizer_for = transformers.AutoTokenizer.from_pretrained
+        df, x, y_ref = data.read_ads_csv(
+            data_path=data_path,
+            n_rows=n_rows,
+            tokenizer=tokenizer_for(pretrained_model_name))
+
+        # predict on the test data
+        y_pred_scores = model.predict(x, batch_size=batch_size)
+        y_pred = (y_pred_scores >= 0.5).astype(int).ravel()
+
+        # evaluate predictions
+        stats_arrays = sklearn.metrics.precision_recall_fscore_support(
+            y_ref, y_pred, labels=[1])
+        stats = [a.item() for a in stats_arrays]
+        row = [model_path] + stats
+        rows.append(row)
+
+        # if requested, print detailed results for this model
+        if verbose:
+            print("=" * len(header))
+            print(header)
+            print(row_fmt.format(*row))
+            print("=" * len(header))
+            df.insert(1, "prediction", y_pred_scores)
+            print(df)
+            print()
+
+    # print results for all models
+    print(header)
+    for row in rows:
+        print(row_fmt.format(*row))
 
 
 if __name__ == "__main__":
@@ -160,10 +191,11 @@ if __name__ == "__main__":
     train_parser.add_argument("--n-epochs", type=int, default=10)
     train_parser.set_defaults(func=train)
     test_parser = subparsers.add_parser("test")
-    test_parser.add_argument("model_path")
+    test_parser.add_argument("model_paths", nargs="+", metavar="model_path")
     test_parser.add_argument("data_path")
     test_parser.add_argument("--n-rows", type=int)
     test_parser.add_argument("--batch-size", type=int, default=1)
+    test_parser.add_argument("--verbose", action="store_true")
     test_parser.set_defaults(func=test)
     args = parser.parse_args()
 
