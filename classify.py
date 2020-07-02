@@ -78,7 +78,6 @@ def train(model_path: Text,
                       verbose=1,
                       save_weights_only=True,
                       save_best_only=True))
-        model.save_weights(model_path)
 
     else:
         if time is None:
