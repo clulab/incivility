@@ -123,6 +123,7 @@ def test(model_paths: Sequence[Text],
     import data
     import models
     import transformers
+    import tensorflow as tf
 
     width = max(len(p) for p in model_paths)
     headers = ["precision", "recall", "f1-score", "support"]
@@ -131,6 +132,7 @@ def test(model_paths: Sequence[Text],
 
     rows = []
     for model_path in model_paths:
+        tf.keras.backend.clear_session()
 
         # load the transformer model
         model_for = transformers.TFRobertaModel.from_pretrained
