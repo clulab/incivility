@@ -124,8 +124,8 @@ def test(model_paths: Sequence[Text],
 
     width = max(len(p) for p in model_paths)
     headers = ["precision", "recall", "f1-score", "support"]
-    header = (f'{{:>{width}s}} ' + ' {:>9}' * 4).format('', *headers)
-    row_fmt = f'{{:>{width}s}} ' + ' {:>9.3f}' * 3 + ' {:>9}'
+    header = (f'{{:<{width}s}} ' + ' {:>9}' * 4).format('', *headers)
+    row_fmt = f'{{:<{width}s}} ' + ' {:>9.3f}' * 3 + ' {:>9}'
 
     rows = []
     for model_path in model_paths:
