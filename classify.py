@@ -3,7 +3,15 @@ import os
 import subprocess
 from typing import Sequence, Text
 import textwrap
+
 import sklearn
+import tensorflow as tf
+import tensorflow_addons as tfa
+import transformers
+
+import data
+import models
+import ga
 
 
 def train(model_path: Text,
@@ -21,13 +29,6 @@ def train(model_path: Text,
     if not qsub:
         if time is not None:
             raise ValueError("time limit not supported")
-
-        import data
-        import models
-        import ga
-        import tensorflow as tf
-        import tensorflow_addons as tfa
-        import transformers
 
         tokenizer_for = transformers.AutoTokenizer.from_pretrained
         tokenizer = tokenizer_for(pretrained_model_name)
@@ -120,10 +121,6 @@ def test(model_paths: Sequence[Text],
          n_rows: int,
          batch_size: int,
          verbose: bool):
-    import data
-    import models
-    import transformers
-    import tensorflow as tf
 
     width = max(len(p) for p in model_paths)
     headers = ["precision", "recall", "f1-score", "support"]
