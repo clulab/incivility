@@ -4,6 +4,7 @@ import subprocess
 from typing import Sequence, Text
 import textwrap
 
+import numpy as np
 import sklearn
 import tensorflow as tf
 import tensorflow_addons as tfa
@@ -42,8 +43,8 @@ def train(model_path: Text,
             tokenizer=tokenizer)
 
         # set class weight inversely proportional to class counts
-        counts = train_df["NAMECALLING"].value_counts()
-        class_weight = (counts.max() / counts).to_dict()
+        counts = np.bincount(train_y)
+        class_weight = dict(enumerate(counts.max() / counts))
 
         # determine optimizer
         optimizer_kwargs = dict(
@@ -179,7 +180,7 @@ if __name__ == "__main__":
     train_parser = subparsers.add_parser("train")
     train_parser.add_argument("model_path")
     train_parser.add_argument("train_data_path")
-    train_parser.add_argument("dev_data_path", nargs='?')
+    train_parser.add_argument("dev_data_path")
     train_parser.add_argument("--qsub", action="store_true")
     train_parser.add_argument("--time")
     train_parser.add_argument("--n-rows", type=int)
