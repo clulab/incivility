@@ -24,14 +24,19 @@ def from_tokenizer(tokenizer: transformers.PreTrainedTokenizer,
         segment_inputs=np.zeros(shape=shape))
 
 
-def read_ads_csv(
+def read_namecalling_csv(
         data_path: Text,
         n_rows: Union[int, None],
         tokenizer: transformers.PreTrainedTokenizer) \
         -> (pd.DataFrame, np.ndarray, np.ndarray):
-    df = pd.read_csv(data_path,
-                     nrows=n_rows,
-                     usecols=["text", "NAMECALLING"]).dropna()
-    x = from_tokenizer(tokenizer, df["text"])
-    y = df["NAMECALLING"].values
+    df = pd.read_csv(data_path, nrows=n_rows)
+    cols = {c.lower().replace(" ", ""): c for c in df.columns}
+    [y_col] = [cols[c] for c in cols if "namecalling" in c]
+    [x_col] = [cols[c] for c in cols if "text" in c or "tweet" in c]
+    df = df[[x_col, y_col]].dropna()
+    if pd.api.types.is_string_dtype(df[y_col]):
+        df[y_col] = pd.to_numeric(df[y_col].replace({"o": "0"}))
+    print(df)
+    x = from_tokenizer(tokenizer, df[x_col])
+    y = df[y_col].values
     return df, x, y

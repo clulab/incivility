@@ -33,11 +33,11 @@ def train(model_path: Text,
 
         tokenizer_for = transformers.AutoTokenizer.from_pretrained
         tokenizer = tokenizer_for(pretrained_model_name)
-        train_df, train_x, train_y = data.read_ads_csv(
+        train_df, train_x, train_y = data.read_namecalling_csv(
             data_path=train_data_path,
             n_rows=n_rows,
             tokenizer=tokenizer)
-        _, dev_x, dev_y = data.read_ads_csv(
+        _, dev_x, dev_y = data.read_namecalling_csv(
             data_path=dev_data_path,
             n_rows=n_rows,
             tokenizer=tokenizer)
@@ -141,7 +141,7 @@ def test(model_paths: Sequence[Text],
 
         # load the tokenizer and tokenize the test data
         tokenizer_for = transformers.AutoTokenizer.from_pretrained
-        df, x, y_ref = data.read_ads_csv(
+        df, x, y_ref = data.read_namecalling_csv(
             data_path=data_path,
             n_rows=n_rows,
             tokenizer=tokenizer_for(pretrained_model_name))
