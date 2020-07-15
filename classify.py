@@ -88,6 +88,10 @@ def train(model_path: Text,
         n_rows_str = "all" if n_rows is None else n_rows
         prefix = f"{model_prefix}.{pretrained_model_name}.r{n_rows_str}.b{batch_size}.ga{grad_accum_steps}.lr{learning_rate}"
         pbs_path = f"{prefix}.pbs"
+
+        def format_paths(paths):
+            return ' '.join(f'"{p}"' for p in paths)
+
         with open(pbs_path, "w") as pbs_file:
             pbs_file.write(textwrap.dedent(f"""
                 #!/bin/bash
@@ -109,9 +113,9 @@ def train(model_path: Text,
                     --batch-size={batch_size} \\
                     --grad-accum-steps={grad_accum_steps} \\
                     --learning-rate={learning_rate} \\
-                    {prefix}.model \\
-                    {' '.join(train_data_paths)} \\
-                    {' '.join(dev_data_paths)}
+                    --train-data {format_paths(train_data_paths)} \\
+                    --dev-data {format_paths(dev_data_paths)} \\
+                    {prefix}.model
                 """))
         subprocess.run(["qsub", pbs_path])
 
