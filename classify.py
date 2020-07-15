@@ -113,9 +113,9 @@ def train(model_path: Text,
                     --batch-size={batch_size} \\
                     --grad-accum-steps={grad_accum_steps} \\
                     --learning-rate={learning_rate} \\
+                    {prefix}.model \\
                     --train-data {format_paths(train_data_paths)} \\
-                    --dev-data {format_paths(dev_data_paths)} \\
-                    {prefix}.model
+                    --dev-data {format_paths(dev_data_paths)}
                 """))
         subprocess.run(["qsub", pbs_path])
 
