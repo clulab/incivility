@@ -1,5 +1,6 @@
 import argparse
 import codecs
+import ftfy
 
 
 def fallback(error: UnicodeDecodeError) -> (str, int):
@@ -21,4 +22,5 @@ if __name__ == "__main__":
 
     with open(args.input_path, encoding="utf-8", errors='fallback') as in_file:
         with open(args.output_path, 'w', encoding='utf-8') as out_file:
-            out_file.write(in_file.read())
+            for line in in_file:
+                out_file.write(ftfy.fix_text(line, uncurl_quotes=False))
