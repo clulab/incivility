@@ -1,10 +1,11 @@
 import argparse
 import os
 import subprocess
-from typing import Sequence, Text
+from typing import List, Sequence, Text
 import textwrap
 
 import numpy as np
+import pandas as pd
 import sklearn
 import tensorflow as tf
 import tensorflow_addons as tfa
@@ -184,6 +185,40 @@ def test(model_paths: Sequence[Text],
         print()
 
 
+def predict_csv(model_path: Text,
+                input_path: Text,
+                output_path: Text,
+                text_col: Text,
+                pretrained_model_name: Text,
+                output_scores: bool,
+                n_rows: int,
+                batch_size: int):
+
+    # load the tokenizer model
+    tokenizer_for = transformers.AutoTokenizer.from_pretrained
+    tokenizer = tokenizer_for(pretrained_model_name)
+
+    # read input data
+    with open(input_path, encoding="utf-8", errors="ignore") as input_file:
+        df = pd.read_csv(input_file, nrows=n_rows)
+    x = data.from_tokenizer(tokenizer, df[text_col])
+
+    # load the pre-trained transformer model
+    model_for = transformers.TFRobertaModel.from_pretrained
+    transformer = model_for(pretrained_model_name)
+
+    # load the fine-tuned transformer model
+    model = models.from_transformer(transformer=transformer, n_outputs=1)
+    model.load_weights(model_path).expect_partial()
+
+    # predict on the test data
+    y_pred = model.predict(x, batch_size=batch_size)
+    df["namecalling"] = (y_pred >= 0.5).astype(int).ravel()
+    if output_scores:
+        df["namecalling_score"] = y_pred
+    df.to_csv(output_path)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--pretrained-model-name", default="roberta-base")
@@ -210,6 +245,15 @@ if __name__ == "__main__":
     test_parser.add_argument("--batch-size", type=int, default=1)
     test_parser.add_argument("--verbose", action="store_true")
     test_parser.set_defaults(func=test)
+    predict_parser = subparsers.add_parser("predict")
+    predict_parser.add_argument("model_path")
+    predict_parser.add_argument("input_path")
+    predict_parser.add_argument("output_path")
+    predict_parser.add_argument("--text-col", default="tweet_text")
+    predict_parser.add_argument("--output-scores", action="store_true")
+    predict_parser.add_argument("--n-rows", type=int)
+    predict_parser.add_argument("--batch-size", type=int, default=1)
+    predict_parser.set_defaults(func=predict_csv)
     args = parser.parse_args()
 
     kwargs = vars(args)
