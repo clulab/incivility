@@ -10,7 +10,8 @@ def from_tokenizer(tokenizer: transformers.PreTrainedTokenizer,
                    pad_token: int = 0) -> Mapping[Text, np.ndarray]:
     rows = [tokenizer.encode(text,
                              add_special_tokens=True,
-                             max_length=tokenizer.model_max_length)
+                             max_length=tokenizer.model_max_length,
+                             truncation=True)
             for text in texts]
     shape = (len(rows), max(len(row) for row in rows))
     token_ids = np.full(shape=shape, fill_value=pad_token)
