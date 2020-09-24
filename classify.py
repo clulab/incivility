@@ -56,7 +56,7 @@ def train(model_path: Text,
         else:
             optimizer_class = tf.optimizers.Adam
 
-        model_for = transformers.TFRobertaModel.from_pretrained
+        model_for = transformers.TFAutoModel.from_pretrained
         model = models.from_transformer(
             transformer=model_for(pretrained_model_name),
             n_outputs=1)
@@ -138,7 +138,7 @@ def test(model_paths: Sequence[Text],
     tokenizer = tokenizer_for(pretrained_model_name)
 
     # load the pre-trained transformer model
-    model_for = transformers.TFRobertaModel.from_pretrained
+    model_for = transformers.TFAutoModel.from_pretrained
     transformer = model_for(pretrained_model_name)
 
     test_data_rows = {p: [] for p in test_data_paths}
@@ -204,7 +204,7 @@ def predict_csv(model_path: Text,
     x = data.from_tokenizer(tokenizer, df[text_col])
 
     # load the pre-trained transformer model
-    model_for = transformers.TFRobertaModel.from_pretrained
+    model_for = transformers.TFAutoModel.from_pretrained
     transformer = model_for(pretrained_model_name)
 
     # load the fine-tuned transformer model
