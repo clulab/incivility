@@ -21,6 +21,6 @@ if __name__ == "__main__":
     codecs.register_error('fallback', fallback)
 
     with open(args.input_path, encoding="utf-8", errors='fallback') as in_file:
-        with open(args.output_path, 'w', encoding='utf-8') as out_file:
+        with open(args.output_path, 'w', encoding='utf-8-sig') as out_file:
             for line in in_file:
                 out_file.write(ftfy.fix_text(line, uncurl_quotes=False))

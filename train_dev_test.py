@@ -33,6 +33,6 @@ if __name__ == "__main__":
           f"test:  {len(test_df)}")
 
     csv_name, _ = os.path.splitext(args.csv_path)
-    train_df.to_csv(csv_name + ".train.csv")
-    dev_df.to_csv(csv_name + ".dev.csv")
-    test_df.to_csv(csv_name + ".test.csv")
+    train_df.to_csv(csv_name + ".train.csv", encoding='utf-8-sig')
+    dev_df.to_csv(csv_name + ".dev.csv", encoding='utf-8-sig')
+    test_df.to_csv(csv_name + ".test.csv", encoding='utf-8-sig')
