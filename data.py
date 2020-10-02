@@ -25,31 +25,34 @@ def from_tokenizer(tokenizer: transformers.PreTrainedTokenizer,
         segment_inputs=np.zeros(shape=shape))
 
 
-def read_namecalling_csv(data_path: Text, n_rows: Union[int, None]) \
-        -> pd.DataFrame:
+def read_csv(
+        data_path: Text,
+        label_col: Text,
+        n_rows: Union[int, None] = None) -> pd.DataFrame:
     df = pd.read_csv(data_path, nrows=n_rows)
     cols = {c.lower().replace(" ", ""): c for c in df.columns}
-    [y_col] = [cols[c] for c in cols if "namecalling" in c]
+    [y_col] = [cols[c] for c in cols if label_col in c]
     [x_col] = [cols[c] for c in cols if "text" in c or "tweet" in c]
     df = df[[x_col, y_col]].dropna()
     if pd.api.types.is_string_dtype(df[y_col]):
         df[y_col] = pd.to_numeric(df[y_col].replace({"o": "0"}))
-    return df.rename(columns={x_col: "text", y_col: "namecalling"})
+    return df.rename(columns={x_col: "text", y_col: label_col})
 
 
-def namecalling_df_to_xy(df: pd.DataFrame,
-                         tokenizer: transformers.PreTrainedTokenizer) \
-        -> (np.ndarray, np.ndarray):
+def df_to_xy(
+        df: pd.DataFrame,
+        tokenizer: transformers.PreTrainedTokenizer,
+        label_col: Text) -> (np.ndarray, np.ndarray):
     x = from_tokenizer(tokenizer, df["text"])
-    y = df["namecalling"].values
+    y = df[label_col].values
     return x, y
 
 
-def read_namecalling_csvs_to_xy(
+def read_csvs_to_xy(
         data_paths: Sequence[Text],
-        n_rows: Union[int, None],
-        tokenizer: transformers.PreTrainedTokenizer) \
-        -> (np.ndarray, np.ndarray):
-    dfs = [read_namecalling_csv(p, n_rows=n_rows) for p in data_paths]
+        tokenizer: transformers.PreTrainedTokenizer,
+        label_col: Text,
+        n_rows: Union[int, None] = None) -> (np.ndarray, np.ndarray):
+    dfs = [read_csv(p, label_col=label_col, n_rows=n_rows) for p in data_paths]
     df = pd.concat(dfs)
-    return namecalling_df_to_xy(df, tokenizer)
+    return df_to_xy(df, tokenizer, label_col=label_col)

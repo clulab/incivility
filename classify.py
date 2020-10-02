@@ -20,6 +20,7 @@ def train(model_path: Text,
           train_data_paths: Sequence[Text],
           dev_data_paths: Sequence[Text],
           pretrained_model_name: Text,
+          label_col: Text,
           n_rows: int,
           learning_rate: float,
           batch_size: int,
@@ -34,14 +35,16 @@ def train(model_path: Text,
 
         tokenizer_for = transformers.AutoTokenizer.from_pretrained
         tokenizer = tokenizer_for(pretrained_model_name)
-        train_x, train_y = data.read_namecalling_csvs_to_xy(
+        train_x, train_y = data.read_csvs_to_xy(
             data_paths=train_data_paths,
             n_rows=n_rows,
-            tokenizer=tokenizer)
-        dev_x, dev_y = data.read_namecalling_csvs_to_xy(
+            tokenizer=tokenizer,
+            label_col=label_col)
+        dev_x, dev_y = data.read_csvs_to_xy(
             data_paths=dev_data_paths,
             n_rows=n_rows,
-            tokenizer=tokenizer)
+            tokenizer=tokenizer,
+            label_col=label_col)
 
         # set class weight inversely proportional to class counts
         counts = np.bincount(train_y)
@@ -87,7 +90,7 @@ def train(model_path: Text,
             raise ValueError("time limit required for qsub")
         model_prefix, _ = os.path.splitext(model_path)
         n_rows_str = "all" if n_rows is None else n_rows
-        prefix = f"{model_prefix}.{pretrained_model_name}.r{n_rows_str}.b{batch_size}.ga{grad_accum_steps}.lr{learning_rate}"
+        prefix = f"{model_prefix}.{label_col}.{pretrained_model_name}.r{n_rows_str}.b{batch_size}.ga{grad_accum_steps}.lr{learning_rate}"
         pbs_path = f"{prefix}.pbs"
 
         def format_paths(paths):
@@ -124,6 +127,7 @@ def train(model_path: Text,
 def test(model_paths: Sequence[Text],
          test_data_paths: Sequence[Text],
          pretrained_model_name: Text,
+         label_col: Text,
          n_rows: int,
          batch_size: int,
          verbose: bool):
@@ -152,8 +156,12 @@ def test(model_paths: Sequence[Text],
         for data_path in test_data_paths:
 
             # tokenize the test data
-            df = data.read_namecalling_csv(data_path=data_path, n_rows=n_rows)
-            x, y_ref = data.namecalling_df_to_xy(df=df, tokenizer=tokenizer)
+            df = data.read_csv(data_path=data_path,
+                               label_col=label_col,
+                               n_rows=n_rows)
+            x, y_ref = data.df_to_xy(df=df,
+                                     tokenizer=tokenizer,
+                                     label_col=label_col)
 
             # predict on the test data
             y_pred_scores = model.predict(x, batch_size=batch_size)
@@ -189,6 +197,7 @@ def predict_csv(model_path: Text,
                 input_path: Text,
                 output_path: Text,
                 text_col: Text,
+                label_col: Text,
                 pretrained_model_name: Text,
                 output_scores: bool,
                 n_rows: int,
@@ -213,15 +222,16 @@ def predict_csv(model_path: Text,
 
     # predict on the test data
     y_pred = model.predict(x, batch_size=batch_size)
-    df["namecalling"] = (y_pred >= 0.5).astype(int).ravel()
+    df[label_col] = (y_pred >= 0.5).astype(int).ravel()
     if output_scores:
-        df["namecalling_score"] = y_pred
-    df.to_csv(output_path)
+        df[f"{label_col}_score"] = y_pred
+    df.to_csv(output_path, encoding='utf-8-sig')
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--pretrained-model-name", default="roberta-base")
+    parser.add_argument("--label-col", default="namecalling")
     subparsers = parser.add_subparsers()
     train_parser = subparsers.add_parser("train")
     train_parser.add_argument("model_path")
