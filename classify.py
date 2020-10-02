@@ -111,7 +111,10 @@ def train(model_path: Text,
                 cd {os.path.dirname(os.path.realpath(__file__))}
                 singularity exec --nv \\
                   $HOME/hpc-ml_centos7-python3.7-transformers2.11.sif \\
-                  python3.7 classify.py train \\
+                  python3.7 classify.py \\
+                    --pretrained-model-name {pretrained_model_name} \\
+                    --label-col {label_col} \\
+                    train \\
                     {'' if n_rows is None else f'--n-rows={n_rows}'} \\
                     --n-epochs={n_epochs} \\
                     --batch-size={batch_size} \\
