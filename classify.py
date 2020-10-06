@@ -103,7 +103,7 @@ def train(model_path: Text,
                 #!/bin/bash
 
                 #PBS -q windfall
-                #PBS -l select=1:ncpus=16:ngpus=1:mem=64gb
+                #PBS -l select=1:ncpus=16{":ngpus=1" if use_gpu else ""}:mem=64gb
                 #PBS -N {prefix}
                 #PBS -W group_list=nlp
                 #PBS -l walltime={time}
