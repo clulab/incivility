@@ -27,7 +27,9 @@ def train(model_path: Text,
           grad_accum_steps: int,
           n_epochs: int,
           qsub: bool,
-          time: Text):
+          time: Text,
+          singularity_image: Text,
+          use_gpu: bool):
 
     if not qsub:
         if time is not None:
@@ -108,9 +110,10 @@ def train(model_path: Text,
 
                 module load singularity
                 module load cuda10/10.1
+                {"export CUDA_VISIBLE_DEVICES=-1" if not use_gpu else ""}
                 cd {os.path.dirname(os.path.realpath(__file__))}
                 singularity exec --nv \\
-                  $HOME/hpc-ml_centos7-python3.7-transformers2.11.sif \\
+                  {singularity_image} \\
                   python3.7 classify.py \\
                     --pretrained-model-name {pretrained_model_name} \\
                     --label-col {label_col} \\
@@ -244,6 +247,10 @@ if __name__ == "__main__":
                               metavar="PATH", required=True)
     train_parser.add_argument("--qsub", action="store_true")
     train_parser.add_argument("--time")
+    train_parser.add_argument("--no-gpu", dest="use_gpu", action="store_false")
+    train_parser.add_argument(
+        "--singularity-image",
+        default="/xdisk/bethard/hpc-ml_centos7-python3.7-transformers3.2.0.sif")
     train_parser.add_argument("--n-rows", type=int)
     train_parser.add_argument("--learning-rate", type=float, default=3e-5)
     train_parser.add_argument("--batch-size", type=int, default=1)
