@@ -1,4 +1,6 @@
+import argparse
 import dataclasses
+import pathlib
 
 import numpy as np
 import pandas as pd
@@ -23,9 +25,9 @@ class IncivilityData:
     text_column: str
     namecalling_column: str
 
-    def load(self, split='train'):
+    def load(self, data_dir, split='train'):
         df = pd.read_csv(
-            self.filename_format.format(split),
+            self.filename_format.format(data_dir=data_dir, split=split),
             usecols=[self.text_column, self.namecalling_column],
             converters={self.namecalling_column: to_binary_label})
         df = df.rename(columns={
@@ -34,30 +36,31 @@ class IncivilityData:
         df = df[["namecalling", "text"]]
         return datasets.Dataset.from_pandas(df, split=split)
 
-
-ARIZONA_DAILY_STAR = IncivilityData(
-    "data/ADS/{}_data_with_tag_and_aux.csv",
-    "text",
-    "NAMECALLING")
-
-PRIMARIES_2020 = IncivilityData(
-    "data/Primaries2020/Consolidated Intercoder Data Tweets pre 2020 non-quotes removed_utf8.{}.csv",
-    "Tweettext",
-    "NameCalling")
-
-RUSSIAN_TROLLS = IncivilityData(
-    "data/Troll/Troll Data Annotated.{}.csv",
-    "Tweet",
-    "Name calling (1 = y; 0 = n)")
-
-TUCSON = IncivilityData(
-    "data/Tucson/Tucson Annotation Final Round Merged.{}.csv",
-    "Tweet",
-    "NAME CALLING (Yes= 1; No = 0).x")
+DATA = {
+    "ADS": IncivilityData(
+        "{data_dir}/{split}_data_with_tag_and_aux.csv",
+        "text",
+        "NAMECALLING"),
+    "Primaries2020": IncivilityData(
+        "{data_dir}/Consolidated Intercoder Data Tweets pre 2020 non-quotes removed_utf8.{split}.csv",
+        "Tweettext",
+        "NameCalling"),
+    "Troll": IncivilityData(
+        "{data_dir}/Troll Data Annotated.{split}.csv",
+        "Tweet",
+        "Name calling (1 = y; 0 = n)"),
+    "Tucson": IncivilityData(
+        "{data_dir}/Tucson Annotation Final Round Merged.{split}.csv",
+        "Tweet",
+        "NAME CALLING (Yes= 1; No = 0).x"),
+}
 
 
-def train(model_name: str, data: IncivilityData):
-    tokenizer = transformers.AutoTokenizer.from_pretrained("distilbert-base-uncased")
+def train(data_dir: str, model_name: str):
+    hf_model_name = "roberta-base"
+    data = DATA[pathlib.PurePath(data_dir).name]
+
+    tokenizer = transformers.AutoTokenizer.from_pretrained(hf_model_name)
     data_collator = transformers.DataCollatorWithPadding(tokenizer=tokenizer)
     f1_metric = evaluate.load("f1")
 
@@ -73,23 +76,23 @@ def train(model_name: str, data: IncivilityData):
     def tokenize(examples):
         return tokenizer(examples["text"], truncation=True)
 
-    data_train = data.load('train').map(set_label).map(tokenize, batched=True)
-    data_dev = data.load('dev').map(set_label).map(tokenize, batched=True)
+    data_train = data.load(data_dir, 'train').map(set_label).map(tokenize, batched=True)
+    data_dev = data.load(data_dir, 'dev').map(set_label).map(tokenize, batched=True)
 
     model = transformers.AutoModelForSequenceClassification.from_pretrained(
-        "distilbert-base-uncased",
+        hf_model_name,
         num_labels=2)
 
     training_args = transformers.TrainingArguments(
         output_dir=model_name,
         learning_rate=2e-5,
-        per_device_train_batch_size=16,
-        per_device_eval_batch_size=16,
+        per_device_train_batch_size=32,
+        per_device_eval_batch_size=32,
         num_train_epochs=10,
-        weight_decay=0.01,
         evaluation_strategy="epoch",
         save_strategy="epoch",
         load_best_model_at_end=True,
+        metric_for_best_model="eval_f1"
     )
 
     trainer = transformers.Trainer(
@@ -106,4 +109,7 @@ def train(model_name: str, data: IncivilityData):
 
 
 if __name__ == "__main__":
-    train("tucson_model", TUCSON)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("data_dir")
+    parser.add_argument("model_name")
+    train(**vars(parser.parse_args()))
