@@ -1,6 +1,7 @@
 import argparse
 import dataclasses
 import pathlib
+import os
 
 import numpy as np
 import pandas as pd
@@ -79,24 +80,27 @@ def train(data_dir: str, model_name: str):
     data_train = data.load(data_dir, 'train').map(set_label).map(tokenize, batched=True)
     data_dev = data.load(data_dir, 'dev').map(set_label).map(tokenize, batched=True)
 
-    model = transformers.AutoModelForSequenceClassification.from_pretrained(
-        hf_model_name,
-        num_labels=2)
+    def model_init():
+        return transformers.AutoModelForSequenceClassification.from_pretrained(
+            hf_model_name,
+            num_labels=2)
 
     training_args = transformers.TrainingArguments(
         output_dir=model_name,
-        learning_rate=2e-5,
-        per_device_train_batch_size=32,
-        per_device_eval_batch_size=32,
+        # learning_rate=2e-5,
+        # per_device_train_batch_size=32,
+        per_device_eval_batch_size=64,
         num_train_epochs=10,
         evaluation_strategy="epoch",
         save_strategy="epoch",
         load_best_model_at_end=True,
-        metric_for_best_model="eval_f1"
+        metric_for_best_model="eval_f1",
+        report_to="wandb",
     )
 
+    os.environ["WANDB_PROJECT"] = "incivility"
     trainer = transformers.Trainer(
-        model=model,
+        model_init=model_init,
         args=training_args,
         train_dataset=data_train,
         eval_dataset=data_dev,
@@ -105,7 +109,34 @@ def train(data_dir: str, model_name: str):
         compute_metrics=compute_metrics,
     )
 
-    trainer.train()
+    #trainer.train()
+    def hp_space(trial):
+        return {
+            # https://github.com/huggingface/transformers/blob/v4.25.1/src/transformers/trainer_utils.py
+            "method": "random",
+            "name": "incivility",
+            "metric": {
+                "name": "eval_f1",
+                "goal": "maximize",
+            },
+            "parameters": {
+                "learning_rate": {"distribution": "uniform", "min": 1e-6, "max": 1e-4},
+                "seed": {"distribution": "int_uniform", "min": 1, "max": 40},
+                "per_device_train_batch_size": {"values": [16, 32, 64]},
+            },
+            # https://docs.wandb.ai/guides/sweeps/define-sweep-configuration#early_terminate
+            "early_terminate": {
+                "type": "hyperband",
+                "min_iter": 3,
+                "eta": 2,
+            }
+        }
+    trainer.hyperparameter_search(
+        direction="maximize", 
+        backend="wandb", 
+        n_trials=16,
+        hp_space=hp_space,
+    )
 
 
 if __name__ == "__main__":
