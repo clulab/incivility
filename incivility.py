@@ -1,5 +1,4 @@
 import argparse
-import dataclasses
 import pathlib
 import os
 
@@ -20,46 +19,53 @@ def to_binary_label(s: str):
     raise ValueError
 
 
-@dataclasses.dataclass
-class IncivilityData:
-    filename_format: str
-    text_column: str
-    namecalling_column: str
+def create_datasets(data_dir: str, output_dir: str):
+    data_path = pathlib.Path(data_dir)
+    output_path = pathlib.Path(output_dir)
+    info = {
+        "arizona_daily_star_comments": (
+            "{split}_data_with_tag_and_aux.csv",
+            "text",
+            "NAMECALLING"),
+        "us_presidential_primary_tweets": (
+            "Consolidated Intercoder Data Tweets pre 2020 non-quotes "
+            "removed_utf8.{split}.csv",
+            "Tweettext",
+            "NameCalling"),
+        "russian_troll_tweets": (
+            "Troll Data Annotated.{split}.csv",
+            "Tweet",
+            "Name calling (1 = y; 0 = n)"),
+        "tucson_official_tweets": (
+            "Tucson Annotation Final Round Merged.{split}.csv",
+            "Tweet",
+            "NAME CALLING (Yes= 1; No = 0).x"),
+    }
 
-    def load(self, data_dir, split='train'):
-        df = pd.read_csv(
-            self.filename_format.format(data_dir=data_dir, split=split),
-            usecols=[self.text_column, self.namecalling_column],
-            converters={self.namecalling_column: to_binary_label})
-        df = df.rename(columns={
-            self.text_column: "text",
-            self.namecalling_column: "namecalling"})
-        df = df[["namecalling", "text"]]
-        return datasets.Dataset.from_pandas(df, split=split)
-
-DATA = {
-    "ADS": IncivilityData(
-        "{data_dir}/{split}_data_with_tag_and_aux.csv",
-        "text",
-        "NAMECALLING"),
-    "Primaries2020": IncivilityData(
-        "{data_dir}/Consolidated Intercoder Data Tweets pre 2020 non-quotes removed_utf8.{split}.csv",
-        "Tweettext",
-        "NameCalling"),
-    "Troll": IncivilityData(
-        "{data_dir}/Troll Data Annotated.{split}.csv",
-        "Tweet",
-        "Name calling (1 = y; 0 = n)"),
-    "Tucson": IncivilityData(
-        "{data_dir}/Tucson Annotation Final Round Merged.{split}.csv",
-        "Tweet",
-        "NAME CALLING (Yes= 1; No = 0).x"),
-}
+    for d in data_path.iterdir():
+        if d.is_dir():
+            name = d.name.lower().replace("-", "_")
+            filename_format, text_column, namecalling_column = info[name]
+            dataset_dict = {}
+            for split, hf_split in [("train", datasets.Split.TRAIN),
+                                    ("dev", datasets.Split.VALIDATION),
+                                    ("test", datasets.Split.TEST)]:
+                df = pd.read_csv(
+                    d / filename_format.format(split=split),
+                    usecols=[text_column, namecalling_column],
+                    converters={namecalling_column: to_binary_label})
+                df = df.rename(columns={
+                    text_column: "text",
+                    namecalling_column: "namecalling"})
+                df = df[["namecalling", "text"]]
+                dataset = datasets.Dataset.from_pandas(df)
+                dataset_dict[str(hf_split)] = dataset
+            datasets.DatasetDict(dataset_dict).save_to_disk(
+                str(output_path / f"incivility_{name}"))
 
 
 def train(data_dir: str, model_name: str):
     hf_model_name = "roberta-base"
-    data = DATA[pathlib.PurePath(data_dir).name]
 
     tokenizer = transformers.AutoTokenizer.from_pretrained(hf_model_name)
     data_collator = transformers.DataCollatorWithPadding(tokenizer=tokenizer)
@@ -77,8 +83,9 @@ def train(data_dir: str, model_name: str):
     def tokenize(examples):
         return tokenizer(examples["text"], truncation=True)
 
-    data_train = data.load(data_dir, 'train').map(set_label).map(tokenize, batched=True)
-    data_dev = data.load(data_dir, 'dev').map(set_label).map(tokenize, batched=True)
+    data = datasets.load_from_disk(data_dir)
+    data_train = data['train'].map(set_label).map(tokenize, batched=True)
+    data_dev = data['validation'].map(set_label).map(tokenize, batched=True)
 
     def model_init():
         return transformers.AutoModelForSequenceClassification.from_pretrained(
@@ -141,6 +148,14 @@ def train(data_dir: str, model_name: str):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("data_dir")
-    parser.add_argument("model_name")
-    train(**vars(parser.parse_args()))
+    subparsers = parser.add_subparsers(required=True)
+    dataset_parser = subparsers.add_parser("dataset")
+    dataset_parser.add_argument("data_dir")
+    dataset_parser.add_argument("output_dir")
+    dataset_parser.set_defaults(func=create_datasets)
+    train_parser = subparsers.add_parser("train")
+    train_parser.add_argument("data_dir")
+    train_parser.add_argument("model_name")
+    train_parser.set_defaults(func=train)
+    kwargs = vars(parser.parse_args())
+    kwargs.pop("func")(**kwargs)
