@@ -58,15 +58,18 @@ def create_datasets(data_dir: str, output_dir: str):
                     text_column: "text",
                     namecalling_column: "namecalling"})
                 df = df[["namecalling", "text"]]
-                dataset = datasets.Dataset.from_pandas(df)
+                dataset = datasets.Dataset.from_pandas(df.dropna())
                 dataset_dict[str(hf_split)] = dataset
             datasets.DatasetDict(dataset_dict).save_to_disk(
                 str(output_path / f"incivility_{name}"))
 
 
-def train(data_dir: str, model_name: str):
-    hf_model_name = "roberta-base"
-    data_name = pathlib.Path(data_dir).name
+def train(hf_model_name: str,
+          model_dir: str,
+          train_dirs: list[str],
+          eval_dirs: list[str],
+          param_search: bool):
+    model_name = pathlib.Path(model_dir).name
 
     tokenizer = transformers.AutoTokenizer.from_pretrained(hf_model_name)
     data_collator = transformers.DataCollatorWithPadding(tokenizer=tokenizer)
@@ -83,21 +86,23 @@ def train(data_dir: str, model_name: str):
 
     def tokenize(examples):
         return tokenizer(examples["text"], truncation=True)
+    
+    def prepare_dataset(dataset_dir, split):
+        dataset = datasets.load_from_disk(dataset_dir)[split]
+        return dataset.map(set_label).map(tokenize, batched=True)
 
-    data = datasets.load_from_disk(data_dir)
-    data_train = data['train'].map(set_label).map(tokenize, batched=True)
-    data_dev = data['validation'].map(set_label).map(tokenize, batched=True)
+    train_datasets = [prepare_dataset(d, "train") for d in train_dirs]
+    eval_datasets = [prepare_dataset(d, "validation") for d in eval_dirs]
 
     def model_init():
         return transformers.AutoModelForSequenceClassification.from_pretrained(
             hf_model_name,
             num_labels=2)
 
-    training_args = transformers.TrainingArguments(
-        output_dir=model_name,
-        # learning_rate=2e-5,
-        per_device_train_batch_size=64,
-        per_device_eval_batch_size=64,
+    training_args = dict(
+        output_dir=model_dir,
+        per_device_train_batch_size=32,
+        per_device_eval_batch_size=32,
         num_train_epochs=10,
         evaluation_strategy="epoch",
         save_strategy="epoch",
@@ -105,44 +110,55 @@ def train(data_dir: str, model_name: str):
         metric_for_best_model="eval_f1",
         report_to="wandb",
     )
-
-    os.environ["WANDB_PROJECT"] = "incivility"
-    trainer = transformers.Trainer(
+    trainer_args = dict(
         model_init=model_init,
-        args=training_args,
-        train_dataset=data_train,
-        eval_dataset=data_dev,
+        train_dataset=datasets.concatenate_datasets(train_datasets),
+        eval_dataset=datasets.concatenate_datasets(eval_datasets),
         tokenizer=tokenizer,
         data_collator=data_collator,
         compute_metrics=compute_metrics,
     )
 
-    #trainer.train()
-    def hp_space(trial):
-        return {
-            "method": "random",
-            "name": f"sweep-{data_name}",
-            "metric": {
-                "name": "eval_f1",
-                "goal": "maximize",
-            },
-            "parameters": {
-                "learning_rate": {"distribution": "uniform", "min": 1e-6, "max": 1e-4},
-                "seed": {"distribution": "int_uniform", "min": 1, "max": 8},
-            },
-            # https://docs.wandb.ai/guides/sweeps/define-sweep-configuration#early_terminate
-            "early_terminate": {
-                "type": "hyperband",
-                "min_iter": 2,
-                "eta": 2,
-            }
-        }
-    trainer.hyperparameter_search(
-        direction="maximize", 
-        backend="wandb", 
-        n_trials=32,
-        hp_space=hp_space,
-    )
+    os.environ["WANDB_PROJECT"] = "incivility"
+
+    if not param_search:
+        args = transformers.TrainingArguments(
+            learning_rate=5e-5,
+            run_name=model_name,
+            **training_args)
+        trainer = transformers.Trainer(args=args, **trainer_args)
+        trainer.train()
+    
+    else:
+        args = transformers.TrainingArguments(**training_args)
+        trainer = transformers.Trainer(args=args, **trainer_args)
+        trainer.hyperparameter_search(
+            direction="maximize", 
+            backend="wandb", 
+            n_trials=32,
+            hp_space=lambda trial: {
+                "method": "random",
+                "name": f"sweep_{model_name}",
+                "metric": {
+                    "name": "eval_f1",
+                    "goal": "maximize",
+                },
+                "parameters": {
+                    "learning_rate": {
+                        "distribution": "uniform",
+                        "min": 1e-6,
+                        "max": 1e-4},
+                    "seed": {
+                        "distribution": "int_uniform",
+                        "min": 1,
+                        "max": 8},
+                },
+                "early_terminate": {
+                    "type": "hyperband",
+                    "min_iter": 2,
+                    "eta": 2,
+                }
+            })
 
 
 if __name__ == "__main__":
@@ -153,8 +169,11 @@ if __name__ == "__main__":
     dataset_parser.add_argument("output_dir")
     dataset_parser.set_defaults(func=create_datasets)
     train_parser = subparsers.add_parser("train")
-    train_parser.add_argument("data_dir")
-    train_parser.add_argument("model_name")
+    train_parser.add_argument("model_dir")
+    train_parser.add_argument("--train-dirs", nargs="+", metavar="dir", required=True)
+    train_parser.add_argument("--eval-dirs", nargs="+", metavar="dir", required=True)
+    train_parser.add_argument("--param-search", action="store_true")
+    train_parser.add_argument("--base-model", dest="hf_model_name", default="roberta-base")
     train_parser.set_defaults(func=train)
     kwargs = vars(parser.parse_args())
     kwargs.pop("func")(**kwargs)
