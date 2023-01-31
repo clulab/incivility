@@ -71,7 +71,9 @@ def train(hf_model_name: str,
           param_search: bool):
     model_name = pathlib.Path(model_dir).name
 
-    tokenizer = transformers.AutoTokenizer.from_pretrained(hf_model_name)
+    tokenizer = transformers.AutoTokenizer.from_pretrained(
+        hf_model_name,
+        model_max_length=512)
     data_collator = transformers.DataCollatorWithPadding(tokenizer=tokenizer)
     f1_metric = evaluate.load("f1")
 
@@ -97,15 +99,18 @@ def train(hf_model_name: str,
     def model_init():
         return transformers.AutoModelForSequenceClassification.from_pretrained(
             hf_model_name,
-            num_labels=2)
+            num_labels=2,
+            ignore_mismatched_sizes=True)
 
     training_args = dict(
         output_dir=model_dir,
         per_device_train_batch_size=32,
         per_device_eval_batch_size=32,
-        num_train_epochs=10,
-        evaluation_strategy="epoch",
-        save_strategy="epoch",
+        num_train_epochs=5,
+        evaluation_strategy="steps",
+        eval_steps=500,
+        save_strategy="steps",
+        save_steps=500,
         load_best_model_at_end=True,
         metric_for_best_model="eval_f1",
         report_to="wandb",
@@ -155,7 +160,7 @@ def train(hf_model_name: str,
                 },
                 "early_terminate": {
                     "type": "hyperband",
-                    "min_iter": 2,
+                    "min_iter": 8,
                     "eta": 2,
                 }
             })
