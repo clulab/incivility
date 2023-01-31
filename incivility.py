@@ -1,6 +1,8 @@
 import argparse
-import pathlib
 import os
+import pathlib
+import pprint
+import time
 
 import numpy as np
 import pandas as pd
@@ -71,37 +73,6 @@ def train(hf_model_name: str,
           param_search: bool):
     model_name = pathlib.Path(model_dir).name
 
-    tokenizer = transformers.AutoTokenizer.from_pretrained(
-        hf_model_name,
-        model_max_length=512)
-    data_collator = transformers.DataCollatorWithPadding(tokenizer=tokenizer)
-    f1_metric = evaluate.load("f1")
-
-    def compute_metrics(eval_pred):
-        predictions, labels = eval_pred
-        predictions = np.argmax(predictions, axis=1)
-        return f1_metric.compute(predictions=predictions, references=labels,
-                                 pos_label=1, average='binary')
-
-    def set_label(examples):
-        return {"label": examples["namecalling"]}
-
-    def tokenize(examples):
-        return tokenizer(examples["text"], truncation=True)
-    
-    def prepare_dataset(dataset_dir, split):
-        dataset = datasets.load_from_disk(dataset_dir)[split]
-        return dataset.map(set_label).map(tokenize, batched=True)
-
-    train_datasets = [prepare_dataset(d, "train") for d in train_dirs]
-    eval_datasets = [prepare_dataset(d, "validation") for d in eval_dirs]
-
-    def model_init():
-        return transformers.AutoModelForSequenceClassification.from_pretrained(
-            hf_model_name,
-            num_labels=2,
-            ignore_mismatched_sizes=True)
-
     training_args = dict(
         output_dir=model_dir,
         per_device_train_batch_size=32,
@@ -115,14 +86,11 @@ def train(hf_model_name: str,
         metric_for_best_model="eval_f1",
         report_to="wandb",
     )
-    trainer_args = dict(
-        model_init=model_init,
-        train_dataset=datasets.concatenate_datasets(train_datasets),
-        eval_dataset=datasets.concatenate_datasets(eval_datasets),
-        tokenizer=tokenizer,
-        data_collator=data_collator,
-        compute_metrics=compute_metrics,
-    )
+    trainer_args = _get_trainer_args(
+        hf_model_name,
+        train_dirs,
+        eval_dirs,
+        eval_split="validation")
 
     os.environ["WANDB_PROJECT"] = "incivility"
 
@@ -166,6 +134,63 @@ def train(hf_model_name: str,
             })
 
 
+def test(model_dir: str, eval_dirs: list[str], split: str):
+    trainer = transformers.Trainer(
+        args=transformers.TrainingArguments(output_dir='temp', report_to="none"),
+        **_get_trainer_args(model_dir, [], eval_dirs, eval_split=split))
+    metrics = trainer.evaluate()
+    time.sleep(1) # seems to be necessary in interactive job
+    pprint.pprint(metrics)
+    
+
+
+def _get_trainer_args(
+    pretrained_model_name,
+    train_dirs: list[str],
+    eval_dirs: list[str],
+    eval_split: str):
+    
+    tokenizer = transformers.AutoTokenizer.from_pretrained(
+        pretrained_model_name,
+        model_max_length=512)
+    data_collator = transformers.DataCollatorWithPadding(tokenizer=tokenizer)
+
+    def prepare_dataset(dataset_dir, split):
+        return datasets.load_from_disk(dataset_dir)[split].map(
+            lambda examples: {"label": examples["namecalling"]}
+        ).map(
+            lambda examples: tokenizer(examples["text"], truncation=True),
+            batched=True
+        )
+
+    metrics = evaluate.combine(["f1", "precision", "recall"])
+    
+    def compute_metrics(eval_pred):
+        logits, labels = eval_pred
+        return metrics.compute(
+            predictions=np.argmax(logits, axis=1),
+            references=labels,
+            pos_label=1,
+            average='binary')
+
+    result = dict(
+        model_init=lambda: transformers.AutoModelForSequenceClassification.from_pretrained(
+            pretrained_model_name,
+            num_labels=2,
+            ignore_mismatched_sizes=True),
+        tokenizer=tokenizer,
+        data_collator=data_collator,
+        compute_metrics=compute_metrics,
+    )
+    if train_dirs:
+        result["train_dataset"] = datasets.concatenate_datasets(
+            [prepare_dataset(d, "train") for d in train_dirs])
+    if eval_dirs:
+        result["eval_dataset"] = datasets.concatenate_datasets(
+            [prepare_dataset(d, eval_split) for d in eval_dirs])
+    return result
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(required=True)
@@ -180,5 +205,10 @@ if __name__ == "__main__":
     train_parser.add_argument("--param-search", action="store_true")
     train_parser.add_argument("--base-model", dest="hf_model_name", default="roberta-base")
     train_parser.set_defaults(func=train)
+    test_parser = subparsers.add_parser("test")
+    test_parser.add_argument("model_dir")
+    test_parser.add_argument("--eval-dirs", nargs="+", metavar="dir", required=True)
+    test_parser.add_argument("--split", default="test")
+    test_parser.set_defaults(func=test)
     kwargs = vars(parser.parse_args())
     kwargs.pop("func")(**kwargs)
