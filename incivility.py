@@ -149,6 +149,8 @@ def _get_trainer_args(
     train_dirs: list[str],
     eval_dirs: list[str],
     eval_split: str):
+
+    label_column = "namecalling"
     
     tokenizer = transformers.AutoTokenizer.from_pretrained(
         pretrained_model_name,
@@ -157,7 +159,7 @@ def _get_trainer_args(
 
     def prepare_dataset(dataset_dir, split):
         return datasets.load_from_disk(dataset_dir)[split].map(
-            lambda examples: {"label": examples["namecalling"]}
+            lambda examples: {"label": examples[label_column]}
         ).map(
             lambda examples: tokenizer(examples["text"], truncation=True),
             batched=True
@@ -177,6 +179,8 @@ def _get_trainer_args(
         model_init=lambda: transformers.AutoModelForSequenceClassification.from_pretrained(
             pretrained_model_name,
             num_labels=2,
+            label2id={f"not-{label_column}": 0, label_column: 1},
+            id2label={0: f"not-{label_column}", 1: label_column},
             ignore_mismatched_sizes=True),
         tokenizer=tokenizer,
         data_collator=data_collator,
