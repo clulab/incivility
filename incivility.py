@@ -27,43 +27,60 @@ def create_datasets(data_dir: str, output_dir: str):
     info = {
         "arizona_daily_star_comments": (
             "{split}_data_with_tag_and_aux.csv",
-            "text",
-            "NAMECALLING"),
+            dict(
+                text="text",
+                aspersion='ASPERSION',
+                hyperbole='HYPERBOLE',
+                lying='LYING',
+                namecalling="NAMECALLING",
+                noncooperation='NONCOOPERATION',
+                offtopic='OFFTOPIC',
+                other_incivility='OTHER INCIVILITY',
+                pejorative='PEJORATIVE',
+                sarcasm='SARCASM')),
         "us_presidential_primary_tweets": (
             "Consolidated Intercoder Data Tweets pre 2020 non-quotes "
             "removed_utf8.{split}.csv",
-            "Tweettext",
-            "NameCalling"),
+            dict(
+                text="Tweettext",
+                namecalling="NameCalling",
+                vulgarity="Vulgarity")),
         "russian_troll_tweets": (
             "Troll Data Annotated.{split}.csv",
-            "Tweet",
-            "Name calling (1 = y; 0 = n)"),
+            dict(
+                text="Tweet",
+                namecalling="Name calling (1 = y; 0 = n)")),
         "tucson_official_tweets": (
             "Tucson Annotation Final Round Merged.{split}.csv",
-            "Tweet",
-            "NAME CALLING (Yes= 1; No = 0).x"),
+            dict(
+                text="Tweet",
+                namecalling="NAME CALLING (Yes= 1; No = 0).x")),
     }
 
     for d in data_path.iterdir():
         if d.is_dir():
-            name = d.name.lower().replace("-", "_")
-            filename_format, text_column, namecalling_column = info[name]
+            dataset_name = d.name.lower().replace("-", "_")
+            filename_format, hf_name_to_csv_name = info[dataset_name]
+            cvs_name_to_hf_name = {v: k for k, v in hf_name_to_csv_name.items()}
+            converters={
+                csv_name: to_binary_label
+                for hf_name, csv_name in hf_name_to_csv_name.items()
+                if hf_name != "text"
+            }
             dataset_dict = {}
             for split, hf_split in [("train", datasets.Split.TRAIN),
                                     ("dev", datasets.Split.VALIDATION),
                                     ("test", datasets.Split.TEST)]:
                 df = pd.read_csv(
                     d / filename_format.format(split=split),
-                    usecols=[text_column, namecalling_column],
-                    converters={namecalling_column: to_binary_label})
-                df = df.rename(columns={
-                    text_column: "text",
-                    namecalling_column: "namecalling"})
-                df = df[["namecalling", "text"]]
+                    usecols=cvs_name_to_hf_name.keys(),
+                    converters=converters)
+                df = df.rename(columns=cvs_name_to_hf_name)
+                df = df[hf_name_to_csv_name.keys()]
                 dataset = datasets.Dataset.from_pandas(df.dropna())
                 dataset_dict[str(hf_split)] = dataset
-            datasets.DatasetDict(dataset_dict).save_to_disk(
-                str(output_path / f"incivility_{name}"))
+            dataset_path = output_path / f"incivility_{dataset_name}"
+            datasets.DatasetDict(dataset_dict).save_to_disk(str(dataset_path))
 
 
 def train(hf_model_name: str,
