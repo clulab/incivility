@@ -37,7 +37,8 @@ def create_datasets(data_dir: str, output_dir: str):
                 offtopic='OFFTOPIC',
                 other_incivility='OTHER INCIVILITY',
                 pejorative='PEJORATIVE',
-                sarcasm='SARCASM')),
+                sarcasm='SARCASM',
+                vulgarity='VULGARITY')),
         "us_presidential_primary_tweets": (
             "Consolidated Intercoder Data Tweets pre 2020 non-quotes "
             "removed_utf8.{split}.csv",
